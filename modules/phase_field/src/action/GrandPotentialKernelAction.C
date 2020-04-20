@@ -67,6 +67,9 @@ validParams<GrandPotentialKernelAction>()
       "use_displaced_mesh", false, "Whether to use displaced mesh in the kernels");
   parameters.addParam<bool>("anisotropic", false, "Set to true if the diffusivity is a tensor");
 
+  parameters.addParam<std::vector<NonlinearVariableName>>(
+      "args","Vector of other coupled variables");
+
   return parameters;
 }
 
@@ -98,12 +101,14 @@ GrandPotentialKernelAction::act()
   auto implicity = getParam<bool>("implicit");
   auto displaced_mesh = getParam<bool>("use_displaced_mesh");
   auto aniso = getParam<bool>("anisotropic");
+  const auto args = getParam<std::vector<NonlinearVariableName>>("args");
 
   // Size definitions and checks
   unsigned int n_w = w_names.size();
   unsigned int n_hj = hj.size();
   std::vector<NonlinearVariableName> etas;
   unsigned int n_etas = 0;
+  unsigned int n_args = args.size();
   std::string kernel_name;
   if (isParamValid("additional_ops"))
   {
@@ -130,25 +135,38 @@ GrandPotentialKernelAction::act()
   all_etas.insert(all_etas.end(), etas.begin(), etas.end());
   all_etas.insert(all_etas.end(), grs.begin(), grs.end());
 
+  std::vector<VariableName> arg_vect; //vector of all args
+  arg_vect.reserve(n_args);
+  arg_vect.insert(arg_vect.end(),args.begin(),args.end());
+
   std::vector<std::string> all_vars; // vector of all variables
-  all_vars.reserve(n_etas + n_grs + n_w);
+  all_vars.reserve(n_etas + n_grs + n_w + n_args);
   all_vars.insert(all_vars.end(), all_etas.begin(), all_etas.end());
   all_vars.insert(all_vars.end(), w_names.begin(), w_names.end());
+  all_vars.insert(all_vars.end(),arg_vect.begin(),arg_vect.end());
+
+
+
 
   std::vector<MaterialPropertyName> fj_temp;
   fj_temp.resize(n_hj);
   std::vector<VariableName> notarealvector;
   notarealvector.resize(1);
   std::vector<VariableName> v0;
-  v0.resize(n_etas + n_grs + n_w);
-  for (unsigned int i = 0; i < n_etas + n_grs + n_w; ++i)
+  v0.resize(n_etas + n_grs + n_w +n_args);
+  for (unsigned int i = 0; i < n_etas + n_grs + n_w +n_args; ++i)
     v0[i] = all_vars[i];
+  // mooseError("all_vars generated");
   std::vector<VariableName> v1;
-  v1.resize(n_etas + n_grs);
+  v1.resize(n_etas + n_grs + n_args);
   for (unsigned int i = 0; i < n_etas + n_grs; ++i)
     v1[i] = all_etas[i];
+  for (unsigned int i = 0; i < n_args; ++i)
+    v1[i+n_etas+n_grs] = args[i];
   std::vector<VariableName> v2;
   v2.resize(n_etas + n_grs - 1);
+
+  // std::cout << v2.size();
 
   // Grains and order parameters
   NonlinearVariableName var_name;
@@ -251,6 +269,7 @@ GrandPotentialKernelAction::act()
     params.set<std::vector<VariableName>>("args") = v1;
     params.set<bool>("implicit") = implicity;
     params.set<bool>("use_displaced_mesh") = displaced_mesh;
+    // params.set<std::vector<NonlinearVariableName>>("args") = args;
     kernel_name = "ChiDt_" + w_names[i];
     _problem->addKernel("SusceptibilityTimeDerivative", kernel_name, params);
 
@@ -260,6 +279,7 @@ GrandPotentialKernelAction::act()
     params.set<bool>("implicit") = implicity;
     params.set<bool>("use_displaced_mesh") = displaced_mesh;
     params.set<MaterialPropertyName>("D_name") = M[i];
+    params.set<std::vector<VariableName>>("args")=arg_vect;
     kernel_name = "MatDif_" + w_names[i];
     if (aniso)
       _problem->addKernel("MatAnisoDiffusion", kernel_name, params);
