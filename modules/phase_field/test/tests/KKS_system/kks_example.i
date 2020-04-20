@@ -17,6 +17,7 @@
   elem_type = QUAD4
 []
 
+
 [Variables]
   # order parameter
   [./eta]
