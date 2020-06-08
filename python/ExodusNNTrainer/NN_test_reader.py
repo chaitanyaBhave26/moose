@@ -38,7 +38,7 @@ y_validate = np.asarray([y[i] for i in range(x.shape[0]) if random_choice[i] >= 
 ####setting up the neural net
 N,D_in = x_training.shape #1000,2
 D_out = 1
-H = 20
+H = 5
 
 X = torch.tensor(x_training,dtype=dtype)
 Y = torch.tensor(y_training,dtype=dtype)
@@ -57,7 +57,7 @@ model = torch.nn.Sequential(
 
 
 loss_fn = torch.nn.MSELoss(reduction='sum')
-model.load_state_dict(torch.load('temp/conc_stress_coupled.pt'))
+model.load_state_dict(torch.load('temp/2_component_inv.pt'))
 # model.eval()
 # for param in model.parameters():
 #     print(param.data)

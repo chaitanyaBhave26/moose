@@ -45,7 +45,7 @@ X,Y = get_rand_training_data(x,y,training_factor)
 ####setting up the neural net
 N,D_in = X.shape #1000,2
 D_out = 1
-H = 20
+H = 5
 
 
 
@@ -75,15 +75,15 @@ while True:
     loss = loss_fn(Y_pred,Y)
     if t % 100 == 0:
         print(t, loss.item())
-        torch.save(model.state_dict(),'temp/conc_stress_coupled.pt')
+        torch.save(model.state_dict(),'temp/2_component_inv.pt')
 
     model.zero_grad()
     loss.backward()
 
     optimizer.step()
     t += 1
-    if(t>1e6 or loss.item()<1e-3):
-        torch.save(model.state_dict(),'temp/conc_stress_coupled.pt')
+    if(t>1e6 or loss.item()<10):
+        torch.save(model.state_dict(),'temp/2_component_inv.pt')
         break
 
 t2 = time()
