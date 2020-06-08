@@ -14,10 +14,17 @@ dtype  = torch.float
 device = torch.device("cuda:0") #"cuda:0" for GPU
 
 #Read and reshape arrays into pytorch tensors
+<<<<<<< HEAD
 with open('training_data.pkl','rb') as file:
     container = pickle.load(file)
 
 x = np.vstack( [container['c_Ni'],container['c_Cr'],container['eta'] ])
+=======
+with open('temp/two_component_data.pkl','rb') as file:
+    container = pickle.load(file)
+
+x = np.vstack( [container['c_Ni'],container['eta'] ])
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 x=np.transpose(x)
 # x=x.reshape((x.shape[0],1) )
 y = container['c_Ni_metal'] #np.transpose(np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ]))
@@ -38,7 +45,11 @@ y_validate = np.asarray([y[i] for i in range(x.shape[0]) if random_choice[i] >= 
 ####setting up the neural net
 N,D_in = x_training.shape #1000,2
 D_out = 1
+<<<<<<< HEAD
 H = 5
+=======
+H = 20
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 
 X = torch.tensor(x_training,dtype=dtype)
 Y = torch.tensor(y_training,dtype=dtype)
@@ -48,14 +59,24 @@ Y = torch.tensor(y_training,dtype=dtype)
 
 model = torch.nn.Sequential(
     torch.nn.Linear(D_in,H),
+<<<<<<< HEAD
     torch.nn.Tanh(),
     torch.nn.Linear(H,H),
     torch.nn.Tanh(),
+=======
+    torch.nn.Sigmoid(),
+    torch.nn.Linear(H,H),
+    torch.nn.Sigmoid(),
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
     torch.nn.Linear(H,D_out),
     )
 
 loss_fn = torch.nn.MSELoss(reduction='sum')
+<<<<<<< HEAD
 model.load_state_dict(torch.load('temp/2_component_inv.pt'))
+=======
+model.load_state_dict(torch.load('temp/conc_stress_coupled.pt'))
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 model.eval()
 
 print("Data format")
@@ -72,7 +93,11 @@ for (i,param) in enumerate(model.parameters() ):
 """
 
 #testing the eval
+<<<<<<< HEAD
 X = np.asarray([[0.696288, 0.977023]] )
+=======
+X = np.asarray([[0.3,0.5]] )
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 #
 X = torch.tensor(X,dtype=dtype) #.t()
 params = model.parameters()
@@ -81,12 +106,17 @@ weights=[w.data for w in params]
 #
 # #first layer is linear
 F = X.mm( weights[0].t() ) + weights[1]
+<<<<<<< HEAD
 print("Linear 1",F)
+=======
+# # print("Linear 1",F)
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 #
 # # #2 hidden layers
 # W = weights[1].shape
 # #
 # # F = F.mm(weights[1].view(20,1).t() )
+<<<<<<< HEAD
 F = torch.tanh(F)
 print("Hidden sigmoid 1 ",F)
 F = F.mm(weights[2].t()) + weights[3]
@@ -98,6 +128,18 @@ print("Hidden sigmoid 2", F)
 F = sum(F.mm(weights[4].t() ) ) + weights[5]
 print(F)
 """
+=======
+F = torch.sigmoid(F)
+# print("Hidden sigmoid 1 ",F)
+#
+F = torch.sigmoid(F)
+# # #
+# print("Hidden sigmoid 2", F)
+# #
+F = sum(F.mm(weights[2].t() ) ) + weights[3]
+print(F)
+
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 # F = torch.sigmoid(F)
 # print("Hidden sigmoid 2",F)
 #
@@ -115,3 +157,7 @@ print(F)
 # for i,param in enumerate(model.parameters()):
 #     if(i==0 or i==3):
 #         print("Linear layer")
+<<<<<<< HEAD
+=======
+"""
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82

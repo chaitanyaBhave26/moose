@@ -27,10 +27,17 @@ dtype  = torch.float
 device = torch.device("cuda:0") #"cuda:0" for GPU
 
 #Read and reshape arrays into pytorch tensors
+<<<<<<< HEAD
 with open('training_data.pkl','rb') as file:
     container = pickle.load(file)
 
 x = np.vstack( [container['c_Ni'],container['c_Cr'],container['eta'] ])
+=======
+with open('temp/two_component_data.pkl','rb') as file:
+    container = pickle.load(file)
+
+x = np.vstack( [container['c_Ni'],container['eta'] ])
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 x=np.transpose(x)
 # x=x.reshape((x.shape[0],1) )
 y = container['c_Ni_metal'] #np.transpose(np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ]))
@@ -45,7 +52,11 @@ X,Y = get_rand_training_data(x,y,training_factor)
 ####setting up the neural net
 N,D_in = X.shape #1000,2
 D_out = 1
+<<<<<<< HEAD
 H = 5
+=======
+H = 20
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 
 
 
@@ -75,15 +86,24 @@ while True:
     loss = loss_fn(Y_pred,Y)
     if t % 100 == 0:
         print(t, loss.item())
+<<<<<<< HEAD
         torch.save(model.state_dict(),'temp/2_component_inv.pt')
+=======
+        torch.save(model.state_dict(),'temp/conc_stress_coupled.pt')
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 
     model.zero_grad()
     loss.backward()
 
     optimizer.step()
     t += 1
+<<<<<<< HEAD
     if(t>1e6 or loss.item()<10):
         torch.save(model.state_dict(),'temp/2_component_inv.pt')
+=======
+    if(t>1e6 or loss.item()<1e-3):
+        torch.save(model.state_dict(),'temp/conc_stress_coupled.pt')
+>>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
         break
 
 t2 = time()
