@@ -27,10 +27,10 @@ dtype  = torch.float
 device = torch.device("cuda:0") #"cuda:0" for GPU
 
 #Read and reshape arrays into pytorch tensors
-with open('temp/two_component_data.pkl','rb') as file:
+with open('training_data.pkl','rb') as file:
     container = pickle.load(file)
 
-x = np.vstack( [container['c_Ni'],container['eta'] ])
+x = np.vstack( [container['c_Ni'],container['c_Cr'],container['eta'] ])
 x=np.transpose(x)
 # x=x.reshape((x.shape[0],1) )
 y = container['c_Ni_metal'] #np.transpose(np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ]))

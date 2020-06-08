@@ -14,10 +14,10 @@ dtype  = torch.float
 device = torch.device("cuda:0") #"cuda:0" for GPU
 
 #Read and reshape arrays into pytorch tensors
-with open('temp/two_component_data.pkl','rb') as file:
+with open('training_data.pkl','rb') as file:
     container = pickle.load(file)
 
-x = np.vstack( [container['c_Ni'],container['eta'] ])
+x = np.vstack( [container['c_Ni'],container['c_Cr'],container['eta'] ])
 x=np.transpose(x)
 # x=x.reshape((x.shape[0],1) )
 y = container['c_Ni_metal'] #np.transpose(np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ]))
@@ -85,7 +85,7 @@ loss = loss_fn(Y_pred,Y)
 
 print(X.shape)
 
-fig, (ax1,ax2) = plt.subplots(2,1,sharex=False)
+fig, (ax1,ax2,ax3) = plt.subplots(3,1,sharex=False)
 plt.suptitle('NN fit for inverting sub-concentration from MOOSE exodus output')
 
 ax1.scatter(X[:,0],Y,s=20,c='b')
@@ -96,9 +96,15 @@ ax1.legend(['Exodus data','NN predictions'])
 
 ax2.scatter(X[:,1],Y,s=20,c='b')
 ax2.scatter(X[:,1],Y_pred.detach(),s=10,c='r')
-ax1.set_xlabel("$\mu_{Cr}$ ($eV$)",fontsize=16)
-ax1.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
+ax2.set_xlabel("$\mu_{Cr}$ ($eV$)",fontsize=16)
+ax2.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
 ax2.legend(['Exodus data','NN predictions'])
+
+ax3.scatter(X[:,2],Y,s=20,c='b')
+ax3.scatter(X[:,2],Y_pred.detach(),s=10,c='r')
+ax3.set_xlabel("$\mu_{Cr}$ ($eV$)",fontsize=16)
+ax3.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
+ax3.legend(['Exodus data','NN predictions'])
 
 
 # plt.title('Mole fraction of component as a function of chemical potential in ideal solution model',fontsize=18)
