@@ -31,7 +31,6 @@ def get_var_vals(fileName,varNames,S):
     T = reader.getTimes()
 
     var_info=reader.getVariableInformation()
-
     if not (all(var in var_info.keys() for var in varNames ) ):
         print("varNames not found in exodus file")
         exit()

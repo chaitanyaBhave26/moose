@@ -4,11 +4,12 @@ import matplotlib.pyplot as plt
 from time import time
 import matplotlib.animation as animation
 import pickle
+import exodusReader
+import NeuralNet_to_XML
 
 ##### SET Numpy random seed to generate predictable numbers, this prevents having to save the training and validate sets
-#####
-
-def get_rand_training_data(x,y,training_factor):
+def get_rand_training_data(x,y,N):
+    training_factor = N/x.shape[0]
     random_choice = np.random.random(x.shape[0])
 
     x_training = np.asarray([x[i] for i in range(x.shape[0]) if random_choice[i] < training_factor ])
@@ -18,49 +19,29 @@ def get_rand_training_data(x,y,training_factor):
     Y = torch.tensor(y_training,dtype=dtype)
     return (X,Y)
 
-    # x_validate = np.asarray([x[i] for i in range(x.shape[0]) if random_choice[i] >= training_factor ])
-    # y_validate = np.asarray([y[i] for i in range(x.shape[0]) if random_choice[i] >= training_factor ])
 
 np.random.seed(4)
 
 dtype  = torch.float
-device = torch.device("cuda:0") #"cuda:0" for GPU
+device = torch.device("cuda:0")
 
-#Read and reshape arrays into pytorch tensors
-<<<<<<< HEAD
-with open('training_data.pkl','rb') as file:
-    container = pickle.load(file)
+#Reader exodus file data using exodusReader
+container = exodusReader.get_var_vals('/home/chaitanya/projects/magpie/simulations/2_component_KKS/1d_KKS/test/test.e',['c_Ni','c_Cr','eta','c_Ni_metal','c_Ni_melt','c_Cr_metal','c_Cr_melt'],10)
 
 x = np.vstack( [container['c_Ni'],container['c_Cr'],container['eta'] ])
-=======
-with open('temp/two_component_data.pkl','rb') as file:
-    container = pickle.load(file)
-
-x = np.vstack( [container['c_Ni'],container['eta'] ])
->>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
 x=np.transpose(x)
-# x=x.reshape((x.shape[0],1) )
-y = container['c_Ni_metal'] #np.transpose(np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ]))
-y=y.reshape((y.shape[0],1) )
 
-#
-######reducing sample size to 1000
-training_factor = 0.3 # 70% of the data will be used in training
+y = np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ,container['c_Cr_metal'],container['c_Cr_melt'] ])
+y = np.transpose(y)
 
-X,Y = get_rand_training_data(x,y,training_factor)
+N = 5000
 
-####setting up the neural net
+X,Y = get_rand_training_data(x,y,N)
+
 N,D_in = X.shape #1000,2
-D_out = 1
-<<<<<<< HEAD
-H = 5
-=======
+D_out = Y.shape[1]
+print("D_out ",D_out)
 H = 20
->>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
-
-
-
-#ge
 
 
 model = torch.nn.Sequential(
@@ -78,6 +59,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 t1 = time()
 t =0
 
+
 #We run the epoch till the loss function drops below the threshold
 while True:
     # X, Y = get_rand_training_data(x,y,training_factor)
@@ -86,32 +68,19 @@ while True:
     loss = loss_fn(Y_pred,Y)
     if t % 100 == 0:
         print(t, loss.item())
-<<<<<<< HEAD
-        torch.save(model.state_dict(),'temp/2_component_inv.pt')
-=======
-        torch.save(model.state_dict(),'temp/conc_stress_coupled.pt')
->>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
-
+        torch.save(model.state_dict(),'test/2_component_inv.pt')
     model.zero_grad()
     loss.backward()
 
     optimizer.step()
     t += 1
-<<<<<<< HEAD
-    if(t>1e6 or loss.item()<10):
-        torch.save(model.state_dict(),'temp/2_component_inv.pt')
-=======
-    if(t>1e6 or loss.item()<1e-3):
-        torch.save(model.state_dict(),'temp/conc_stress_coupled.pt')
->>>>>>> 934acbc73fe662e57108ac9ad0a96ff59065ae82
+    if(t>1e6 or loss.item()<5e-3):
+        torch.save(model.state_dict(),'test/2_component_inv.pt')
         break
 
 t2 = time()
 print(t2 -t1)
 
-# plt.scatter(y,x)
-# plt.scatter(model(x).detach(),x)
-# plt.xlabel("\mu (eV)")
-# plt.ylabel("Component mole fraction")
-
-# print(model.parameters())
+XML_str = (NeuralNet_to_XML.getXML_format(model))
+with open('test/NN_struct_c_Ni_metal.XML','w+') as file:
+    file.write(XML_str)

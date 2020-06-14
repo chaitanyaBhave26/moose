@@ -13,6 +13,7 @@ def getXML_format(model):
                 weight_tensor = next(params)
                 bias_tensor = next(params)
                 m,n = weight_tensor.shape
+                print(weight_tensor)
                 weight = [str(i) for i in weight_tensor.data.flatten().tolist()]
                 bias   = [str(i) for i in bias_tensor.data.flatten().tolist()]
                 XML_str+="<TYPE>LINEAR</TYPE>"
@@ -27,32 +28,25 @@ def getXML_format(model):
                 XML_str+="<TYPE>Sigmoid</TYPE>"
             XML_str+="</LAYER>"
 
-            # print(m[1].type)
-            # try:
-            #     print(next(params))
-            # except:
-            #     print("No weights"
     XML_str+="</NeuralNet>"
     return XML_str
-    # print(XML_str)
 
-    # for idx,m in enumerate(model.parameters()):
-    #     print(idx,'->',m)
+if __name__ == '__main__':
+    D_in = 3
+    H = 5
+    D_out = 1
 
+    model = torch.nn.Sequential(
+        torch.nn.Linear(D_in,H),
+        torch.nn.Tanh(),
+        torch.nn.Linear(H,H),
+        torch.nn.Tanh(),
+        torch.nn.Linear(H,D_out),
+        )
 
-D_in = 2
-H = 5
-D_out = 1
+    loss_fn = torch.nn.MSELoss(reduction='sum')
+    model.load_state_dict(torch.load('temp/2_component_inv.pt'))
 
-model = torch.nn.Sequential(
-    torch.nn.Linear(D_in,H),
-    torch.nn.Tanh(),
-    torch.nn.Linear(H,H),
-    torch.nn.Tanh(),
-    torch.nn.Linear(H,D_out),
-    )
-
-loss_fn = torch.nn.MSELoss(reduction='sum')
-model.load_state_dict(torch.load('temp/2_component_inv.pt'))
-
-print(getXML_format(model))
+    XML_str = (getXML_format(model))
+    with open('NN_struct.XML','w+') as file:
+        file.write(XML_str)
