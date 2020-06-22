@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from time import time
 from matplotlib.pyplot import figure
 import pickle
+import exodusReader
 
 ##### SET Numpy random seed to generate predictable numbers, this prevents having to save the training and validate sets
 #####
@@ -14,17 +15,16 @@ dtype  = torch.float
 device = torch.device("cuda:0") #"cuda:0" for GPU
 
 #Read and reshape arrays into pytorch tensors
-with open('training_data.pkl','rb') as file:
-    container = pickle.load(file)
+container = exodusReader.get_var_vals('/home/chaitanya/projects/magpie/simulations/nn_material_test/kks/kks.e',['w_Ni','w_Cr','eta','c_Ni_metal','c_Ni_melt','c_Cr_metal','c_Cr_melt'],10)
 
-x = np.vstack( [container['c_Ni'],container['c_Cr'],container['eta'] ])
+
+x = np.vstack( [container['w_Ni'],container['w_Cr'],container['eta'] ])
 
 
 x=np.transpose(x)
 # x=x.reshape((x.shape[0],1) )
-y = container['c_Ni_metal'] #np.transpose(np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ]))
-y=y.reshape((y.shape[0],1) )
-
+y = np.vstack( [container['c_Ni_metal'],container['c_Ni_melt'] ,container['c_Cr_metal'],container['c_Cr_melt'] ])
+y = np.transpose(y)
 #
 ######reducing sample size to 1000
 training_factor = 0.3 # 70% of the data will be used in training
@@ -39,39 +39,28 @@ y_validate = np.asarray([y[i] for i in range(x.shape[0]) if random_choice[i] >= 
 
 ####setting up the neural net
 N,D_in = x_training.shape #1000,2
-D_out = 1
-H = 5
+D_out = 4
+H = 20
 
 X = torch.tensor(x_training,dtype=dtype)
 Y = torch.tensor(y_training,dtype=dtype)
 
-#ge
-
-
 model = torch.nn.Sequential(
     torch.nn.Linear(D_in,H),
-    torch.nn.Tanh(),
+    torch.nn.LogSigmoid(),
     torch.nn.Linear(H,H),
-    torch.nn.Tanh(),
+    torch.nn.LogSigmoid(),
     torch.nn.Linear(H,D_out),
     )
 
 
-
 loss_fn = torch.nn.MSELoss(reduction='sum')
-model.load_state_dict(torch.load('temp/2_component_inv.pt'))
-# model.eval()
-# for param in model.parameters():
-#     print(param.data)
-
+model.load_state_dict(torch.load('nn_uo/2_component_inv.pt'))
 
 #generate a sub-sample of the validate data set
 
 X = x_validate[:N]
 Y = y_validate[:N]
-# X = np.arange(1.5,2.6,1.1/N)
-# X=X.reshape((X.shape[0],1) )
-# Y = np.arange(1e-6,1,1/N)
 
 #convert to tensors
 X = torch.tensor(X,dtype=dtype)
@@ -81,32 +70,41 @@ Y = torch.tensor(Y,dtype=dtype)
 
 Y_pred = model(X)
 loss = loss_fn(Y_pred,Y)
-# print(loss)
-
-##flatten t
 
 print(X.shape)
 
 fig, (ax1,ax2,ax3) = plt.subplots(3,1,sharex=False)
 plt.suptitle('NN fit for inverting sub-concentration from MOOSE exodus output')
 
-ax1.scatter(X[:,0],Y,s=20,c='b')
-ax1.scatter(X[:,0],Y_pred.detach(),s=10,c='r')
+ax1.scatter(X[:,0],Y[:,0],s=20,c='b')
+ax1.scatter(X[:,0],Y_pred.detach()[:,0],s=10,c='r')
 ax1.set_xlabel("$\mu_{Ni}$ ($eV$)",fontsize=16)
 ax1.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
 ax1.legend(['Exodus data','NN predictions'])
 
-ax2.scatter(X[:,1],Y,s=10,c='r')
-ax2.scatter(X[:,1],Y_pred.detach(),s=10,c='r')
+ax2.scatter(X[:,1],Y[:,0],s=20,c='b')
+ax2.scatter(X[:,1],Y_pred.detach()[:,0],s=10,c='r')
 ax2.set_xlabel("$\mu_{Cr}$ ($eV$)",fontsize=16)
 ax2.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
 ax2.legend(['Exodus data','NN predictions'])
 
-ax3.scatter(X[:,2],Y,s=20,c='b')
-ax3.scatter(X[:,2],Y_pred.detach(),s=10,c='r')
-ax3.set_xlabel("$\mu_{Cr}$ ($eV$)",fontsize=16)
+ax3.scatter(X[:,2],Y[:,0],s=20,c='b')
+ax3.scatter(X[:,2],Y_pred.detach()[:,0],s=10,c='r')
+ax3.set_xlabel("$\eta$ ",fontsize=16)
 ax3.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
 ax3.legend(['Exodus data','NN predictions'])
+
+# ax2.scatter(X[:,1],Y,s=10,c='r')
+# ax2.scatter(X[:,1],Y_pred.detach(),s=10,c='r')
+# ax2.set_xlabel("$\mu_{Cr}$ ($eV$)",fontsize=16)
+# ax2.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
+# ax2.legend(['Exodus data','NN predictions'])
+#
+# ax3.scatter(X[:,2],Y,s=20,c='b')
+# ax3.scatter(X[:,2],Y_pred.detach(),s=10,c='r')
+# ax3.set_xlabel("$\mu_{Cr}$ ($eV$)",fontsize=16)
+# ax3.set_ylabel("$c^{metal}_{Ni}$",fontsize=16)
+# ax3.legend(['Exodus data','NN predictions'])
 
 # plt.title('Mole fraction of component as a function of chemical potential in ideal solution model',fontsize=18)
 # plt.legend(['Inverse function','NN fit'],fontsize=16)
