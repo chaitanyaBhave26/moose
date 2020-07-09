@@ -52,11 +52,8 @@ def get_var_vals(fileName,varNames,S):
                 try:
                     var_values_dict[var] = np.hstack([var_values_dict[var],var_vals] )
                 except Exception as e:
-                    print(e)
                     var_values_dict[var]=var_vals
 
-                if(var=='cd'):
-                    print(var_values_dict[var].shape)
     return var_values_dict
 
 if __name__ == '__main__':
@@ -67,7 +64,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--vars','--names-list',nargs='+',help='List of variable names to extract from the exodus file')
 
-    parser.add_argument('--o',help='File name to output variable data to. Acceptable formats are *.npz, *.pkl and *.csv') #currently only implemented pkl format
+    parser.add_argument('--o',help='File name to output variable data to. Acceptable format is *.pkl') #currently only implemented pkl format
 
     parser.add_argument('--s',help='Sampling factor for time steps. Samples every s time steps',type=int,default=1)
     args = parser.parse_args()
@@ -84,7 +81,7 @@ if __name__ == '__main__':
         print("Exodus file or directory does not exist.")
         exit()
     if not path.exists(path.dirname(output_file)):
-        print("Output path directory does not exist")
+        print("Output path directory does not exist. Please provide full directory path to file")
         exit()
     if not S>0:
         print("Sampling factor cannot be negative")
