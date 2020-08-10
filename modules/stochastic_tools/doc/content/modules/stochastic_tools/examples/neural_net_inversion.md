@@ -50,6 +50,6 @@ We replace the ICs for the sub-concentrations in the kks_training.i input file w
 
 The inputs to the NeuralNetworkIC are the input variables, index of the output array to feed to the variable that we are providing the IC for, and the variable name itself. We run this simulation the exact same way as the first simulation, and compare the wall times against the simulation time for both models.
 
-\media media/KKS_vs_NN_IC_KKS.png
+!media media/KKS_vs_NN_IC_KKS.png style=width:50%; caption=Performance comparison of KKS simulation with and without NeuralNetworkIC
 
 Using the [NeuralNetworkIC.md] condition reduces the simulation time. This is achieved by improving the convergence rate for the first time step, since we are providing a good initial guess to the Newton solver.
