@@ -51,9 +51,10 @@ void NeuralNetworkUserObject::setXMLWeights()
 pugi::xml_node root = doc.document_element();
 std::string activation_layers;
 
+std::size_t idx = 0;
+
  for (pugi::xml_node layer = root.child("LAYER"); layer; layer = layer.next_sibling("LAYER") )
   {
-    std::size_t idx = layer.attribute("id").as_uint();
     auto neuron_type = layer.child("TYPE").text().as_string();
     _layerActivationFunctionEnum.push_back(neuron_type);
 
@@ -112,7 +113,7 @@ std::string activation_layers;
       case 4: //LOGSIGMOID
         break;
     }
-
+    idx++;
     }
 
 }

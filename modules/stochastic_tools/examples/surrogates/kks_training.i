@@ -6,21 +6,14 @@
   dim  = 1
   nx   = 20
   xmax = 1000
-  ny   = 2
-  ymax = 50
+  ny   = 1
+  ymax = 1000
   uniform_refine = 5
 
 []
 
 [GlobalParams]
   profile=TANH
-[]
-
-[UserObjects]
-  [./neuron_test]
-    type = NeuralNetwork
-    weights_file = "/home/chaitanya/projects/magpie/simulations/2_component_KKS/1d_KKS/test/NN_struct.XML"
-  [../]
 []
 
 [Variables]
@@ -43,8 +36,13 @@
   [../]
   [./w_Cr]
   [../]
-  [./eta] #represents the metal phase
+  [./eta]
   [../]
+[]
+
+[AuxVariables]
+
+
 []
 
 [Kernels]
@@ -149,6 +147,7 @@
     ca       = c_Ni_melt
     cb       = c_Ni_metal
     fa_name  = f_melt
+    # fb_name  = fd
     h_name = h_metal
     mob_name = L
     args = 'c_Ni_melt c_Ni_metal c_Cr_metal c_Cr_melt'
@@ -159,6 +158,7 @@
     ca       = c_Cr_melt
     cb       = c_Cr_metal
     fa_name  = f_melt
+    # fb_name  = fd
     h_name = h_metal
     mob_name = L
     args = 'c_Cr_melt c_Cr_metal c_Ni_metal c_Ni_melt'
@@ -169,6 +169,7 @@
     variable = eta
     kappa_name = kappa
     mob_name = L
+    # args = 'c_Ni_melt c_Ni_metal c_Cr_metal c_Cr_melt'
   [../]
   [./detadt]
     type = TimeDerivative
@@ -177,37 +178,6 @@
 []
 
 [ICs]
-  [./c_ni_metal_initial]
-    type = NeuralNetworkIC
-    variable = c_Ni_metal
-    InputVariables = 'c_Ni c_Cr eta'
-    NeuralNetwork_user_object = neuron_test
-    op_id = 0
-  [../]
-  [./c_ni_melt_initial]
-    type = NeuralNetworkIC
-    variable = c_Ni_melt
-    InputVariables = 'c_Ni c_Cr eta'
-    NeuralNetwork_user_object = neuron_test
-    op_id = 1
-  [../]
-  [./c_Cr_metal_initial]
-    type = NeuralNetworkIC
-    variable = c_Cr_metal
-    InputVariables = 'c_Ni c_Cr eta'
-    NeuralNetwork_user_object = neuron_test
-    op_id = 2
-  [../]
-  [./c_cr_melt_initial]
-    type = NeuralNetworkIC
-    variable = c_Cr_melt
-    InputVariables = 'c_Ni c_Cr eta'
-    NeuralNetwork_user_object = neuron_test
-    op_id = 3
-  [../]
-
-
-
   [./eta_metal_inital]
     type = SmoothCircleIC
     variable = 'eta'
@@ -230,7 +200,29 @@
       invalue = '0.8'
       outvalue = 0.02
     [../]
-# #Cr INITIAL CONDITIONS
+  [./c_Ni_metal_inital]
+    type = SmoothCircleIC
+    variable = 'c_Ni_metal'
+    int_width = 20
+    x1 = 0
+    y1 = 0
+    radius = 100
+    invalue = '0.8'
+    outvalue = '0.99'
+  [../]
+
+  [./c_Ni_melt_inital]
+    type = SmoothCircleIC
+    variable = 'c_Ni_melt'
+    int_width = 20
+    x1 = 0
+    y1 = 0
+    radius = 100
+    invalue = 0.02
+    outvalue = 0.02
+  [../]
+
+#Cr INITIAL CONDITIONS
 [./c_Cr_global_inital]
     type = SmoothCircleIC
     variable = 'c_Cr'
@@ -241,6 +233,27 @@
     invalue = '0.19'
     outvalue = 0.003
   [../]
+[./c_Cr_metal_inital]
+  type = SmoothCircleIC
+  variable = 'c_Cr_metal'
+  int_width = 20
+  x1 = 0
+  y1 = 0
+  radius = 100
+  invalue = '0.19'
+  outvalue = '8e-4'
+[../]
+[./c_Cr_melt_inital]
+  type = SmoothCircleIC
+  variable = 'c_Cr_melt'
+  int_width = 20
+  x1 = 0
+  y1 = 0
+  radius = 100
+  invalue = 0.042
+  outvalue = 0.003
+[../]
+
 
 []
 
@@ -269,7 +282,7 @@
       function = '6*interface_energy_sigma/interface_thickness_l'
     [../]
 
-    #SWITCHING FUNCTIONS
+        #SWITCHING FUNCTIONS
     [./h_metal]
       type = SwitchingFunctionMaterial
       function_name = 'h_metal'
@@ -376,6 +389,7 @@
   scaling_group_variables = 'eta'
   dtmax = 0.05
   end_time = 1
+  # num_steps = 1
   [./TimeStepper]
     type = IterationAdaptiveDT
     dt = 1e-2
@@ -385,6 +399,7 @@
     cutback_factor = 0.8
   [../]
 []
+
 [Postprocessors]
   [./elapsed]
     type = PerfGraphData
@@ -395,7 +410,7 @@
 
 [Outputs]
   exodus = true
+  file_base = 'kks_training/kks_training'
   perf_graph = true
   csv = true
-  file_base = 'kks_training/kks_training'
 []

@@ -20,8 +20,8 @@
 
 [UserObjects]
   [./neuron_test]
-    type = NeuralNetwork
-    weights_file = "/home/chaitanya/projects/magpie/simulations/2_component_KKS/1d_KKS/test/NN_struct.XML"
+    type = NeuralNetworkUserObject
+    weights_file = "kks_training/NN_KKS_IC.XML"
   [../]
 []
 
@@ -406,7 +406,7 @@
   [../]
   # num_steps = 1
 
-  num_steps = 0
+  # num_steps = 0
 []
 [Postprocessors]
   [./elapsed]
@@ -418,7 +418,7 @@
 
 [Outputs]
   exodus = true
-  # perf_graph = true
-  # csv = true
-  file_base = 'temp/temp'
+  perf_graph = true
+  csv = true
+  file_base = 'kks_training/kks_nn_ic'
 []
