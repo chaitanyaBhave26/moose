@@ -80,15 +80,13 @@ XFEM::getCrackTipOrigin(std::map<unsigned int, const Elem *> & elem_id_crack_tip
        ++mit1)
   {
     unsigned int elem_id = mit1->first->id();
-    if (elem_id > 999999)
+    if (elem_id == std::numeric_limits<unsigned int>::max())
     {
       elem_id_map[m] = mit1->first;
       m--;
     }
     else
-    {
       elem_id_map[elem_id] = mit1->first;
-    }
   }
 
   for (std::map<unsigned int, const Elem *>::iterator mit1 = elem_id_map.begin();
@@ -236,9 +234,7 @@ XFEM::updateHeal()
     //    _mesh->contract();
     _mesh->allow_renumbering(false);
     _mesh->skip_partitioning(true);
-    _mesh->prepare_for_use(false, false);
-    //    _mesh->prepare_for_use(true,true); //doing this preserves the numbering, but generates
-    //    warning
+    _mesh->prepare_for_use();
 
     if (_displaced_mesh)
     {
@@ -247,8 +243,7 @@ XFEM::updateHeal()
       MeshCommunication().make_nodes_parallel_consistent(*_displaced_mesh);
       _displaced_mesh->allow_renumbering(false);
       _displaced_mesh->skip_partitioning(true);
-      _displaced_mesh->prepare_for_use(false, false);
-      //      _displaced_mesh->prepare_for_use(true,true);
+      _displaced_mesh->prepare_for_use();
     }
   }
 
@@ -286,16 +281,13 @@ XFEM::update(Real time, NonlinearSystemBase & nl, AuxiliarySystem & aux)
     //    _mesh->contract();
     _mesh->allow_renumbering(false);
     _mesh->skip_partitioning(true);
-    _mesh->prepare_for_use(false, false);
-    //    _mesh->prepare_for_use(true,true); //doing this preserves the numbering, but generates
-    //    warning
+    _mesh->prepare_for_use();
 
     if (_displaced_mesh)
     {
       _displaced_mesh->allow_renumbering(false);
       _displaced_mesh->skip_partitioning(true);
-      _displaced_mesh->prepare_for_use(false, false);
-      //      _displaced_mesh->prepare_for_use(true,true);
+      _displaced_mesh->prepare_for_use();
     }
   }
 
@@ -602,7 +594,7 @@ XFEM::markCutEdgesByState(Real time)
 
     // find the first cut edge
     unsigned int nsides = CEMElem->numEdges();
-    unsigned int orig_cut_side_id = 999999;
+    unsigned int orig_cut_side_id = std::numeric_limits<unsigned int>::max();
     Real orig_cut_distance = -1.0;
     EFANode * orig_node = NULL;
     EFAEdge * orig_edge = NULL;

@@ -362,6 +362,16 @@ struct ADType<VariableValue>
 {
   typedef ADVariableValue type;
 };
+template <>
+struct ADType<VariableGradient>
+{
+  typedef ADVariableGradient type;
+};
+template <>
+struct ADType<VariableSecond>
+{
+  typedef ADVariableSecond type;
+};
 
 } // namespace Moose
 
@@ -435,6 +445,10 @@ template <bool is_ad>
 using GenericRankFourTensor = typename Moose::GenericStruct<RankFourTensor, is_ad>::type;
 template <bool is_ad>
 using GenericVariableValue = typename Moose::GenericStruct<VariableValue, is_ad>::type;
+template <bool is_ad>
+using GenericVariableGradient = typename Moose::GenericStruct<VariableGradient, is_ad>::type;
+template <bool is_ad>
+using GenericVariableSecond = typename Moose::GenericStruct<VariableSecond, is_ad>::type;
 
 #define declareADValidParams(ADObjectType)                                                         \
   template <>                                                                                      \
@@ -551,8 +565,8 @@ enum CouplingType
 
 enum ConstraintSideType
 {
-  SIDE_MASTER,
-  SIDE_SLAVE
+  SIDE_PRIMARY,
+  SIDE_SECONDARY
 };
 
 enum DGResidualType
@@ -571,8 +585,8 @@ enum DGJacobianType
 
 enum ConstraintType
 {
-  Slave = Element,
-  Master = Neighbor
+  Secondary = Element,
+  Primary = Neighbor
 };
 
 enum class ElementType : unsigned int
@@ -584,8 +598,8 @@ enum class ElementType : unsigned int
 
 enum class MortarType : unsigned int
 {
-  Slave = static_cast<unsigned int>(Moose::ElementType::Element),
-  Master = static_cast<unsigned int>(Moose::ElementType::Neighbor),
+  Secondary = static_cast<unsigned int>(Moose::ElementType::Element),
+  Primary = static_cast<unsigned int>(Moose::ElementType::Neighbor),
   Lower = static_cast<unsigned int>(Moose::ElementType::Lower)
 };
 
@@ -600,15 +614,15 @@ enum class RESTARTABLE_FILTER : unsigned char
 
 enum ConstraintJacobianType
 {
-  SlaveSlave = ElementElement,
-  SlaveMaster = ElementNeighbor,
-  MasterSlave = NeighborElement,
-  MasterMaster = NeighborNeighbor,
+  SecondarySecondary = ElementElement,
+  SecondaryPrimary = ElementNeighbor,
+  PrimarySecondary = NeighborElement,
+  PrimaryPrimary = NeighborNeighbor,
   LowerLower,
-  LowerSlave,
-  LowerMaster,
-  SlaveLower,
-  MasterLower
+  LowerSecondary,
+  LowerPrimary,
+  SecondaryLower,
+  PrimaryLower
 };
 
 enum CoordinateSystemType
@@ -658,12 +672,12 @@ enum SolveType
  */
 enum EigenSolveType
 {
-  EST_POWER,              ///< Power / Inverse / RQI
-  EST_ARNOLDI,            ///< Arnoldi
-  EST_KRYLOVSCHUR,        ///< Krylov-Schur
-  EST_JACOBI_DAVIDSON,    ///< Jacobi-Davidson
-  EST_NONLINEAR_POWER,    ///< Nonlinear inverse power
-  EST_NEWTON,             ///< Newton-based eigen solver
+  EST_POWER,           ///< Power / Inverse / RQI
+  EST_ARNOLDI,         ///< Arnoldi
+  EST_KRYLOVSCHUR,     ///< Krylov-Schur
+  EST_JACOBI_DAVIDSON, ///< Jacobi-Davidson
+  EST_NONLINEAR_POWER, ///< Nonlinear inverse power
+  EST_NEWTON,          ///< Newton-based eigen solver
 };
 
 /**

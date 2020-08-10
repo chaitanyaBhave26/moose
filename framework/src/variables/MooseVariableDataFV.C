@@ -20,6 +20,7 @@
 #include "FVDirichletBC.h"
 #include "SubProblem.h"
 #include "FVKernel.h"
+#include "ADUtils.h"
 
 #include "libmesh/quadrature.h"
 #include "libmesh/fe_base.h"
@@ -86,7 +87,7 @@ MooseVariableDataFV<OutputType>::MooseVariableDataFV(const MooseVariableFV<Outpu
     _need_dof_values_dotdot_old(false),
     _need_dof_du_dot_du(false),
     _need_dof_du_dotdot_du(false),
-    _time_integrator(nullptr),
+    _time_integrator(_sys.getTimeIntegrator()),
     _elem(elem),
     _displaced(dynamic_cast<const DisplacedSystem *>(&_sys) ? true : false)
 {
@@ -105,8 +106,6 @@ MooseVariableDataFV<OutputType>::MooseVariableDataFV(const MooseVariableFV<Outpu
 
   _need_matrix_tag_u.resize(num_matrix_tags);
   _matrix_tag_u.resize(num_matrix_tags);
-
-  _time_integrator = _sys.getTimeIntegrator();
 }
 
 template <typename OutputType>
@@ -776,24 +775,8 @@ MooseVariableDataFV<OutputType>::computeAD(const unsigned int num_dofs, const un
     _ad_u_dot.resize(nqp);
   }
 
-  // Derivatives are offset by the variable number
-  size_t ad_offset;
-  switch (_element_type)
-  {
-    case Moose::ElementType::Element:
-      ad_offset = _var_num * _sys.getMaxVarNDofsPerElem();
-      break;
-
-    case Moose::ElementType::Neighbor:
-      ad_offset = _var_num * _sys.getMaxVarNDofsPerElem() +
-                  (_sys.system().n_vars() * _sys.getMaxVarNDofsPerElem());
-      break;
-
-    default:
-      mooseError(
-          "Unsupported element type ",
-          static_cast<typename std::underlying_type<decltype(_element_type)>::type>(_element_type));
-  }
+  auto ad_offset = Moose::adOffset(
+      _var_num, _sys.getMaxVarNDofsPerElem(), _element_type, _sys.system().n_vars());
   mooseAssert(_var.kind() == Moose::VarKindType::VAR_AUXILIARY || ad_offset || !_var_num,
               "Either this is the zeroth variable or we should have an offset");
 

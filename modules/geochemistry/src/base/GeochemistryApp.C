@@ -20,6 +20,8 @@ GeochemistryApp::validParams()
   // Do not use legacy DirichletBC, that is, set DirichletBC default for preset = true
   params.set<bool>("use_legacy_dirichlet_bc") = false;
 
+  params.set<bool>("use_legacy_material_output") = false;
+
   return params;
 }
 
@@ -36,7 +38,17 @@ static void
 associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
 {
   registerSyntax("AddGeochemicalModelInterrogatorAction", "GeochemicalModelInterrogator");
-  registerSyntax("AddEquilibriumReactionSolverAction", "EquilibriumReactionSolver");
+
+  registerSyntax("AddTimeIndependentReactionSolverAction", "TimeIndependentReactionSolver");
+  registerSyntax("AddTimeDependentReactionSolverAction", "TimeDependentReactionSolver");
+
+  registerMooseObjectTask("add_geochemistry_reactor", AddGeochemistrySolverAction, false);
+  addTaskDependency("add_geochemistry_reactor",
+                    "add_user_object"); // depends on the GeochemicalModelDefinition
+
+  registerMooseObjectTask("add_geochemistry_molality_aux", AddGeochemistrySolverAction, false);
+  addTaskDependency("add_geochemistry_molality_aux",
+                    "add_geochemistry_reactor"); // depends on the GeochemistryReactor
 }
 
 void

@@ -111,7 +111,7 @@ namespace
  * Method for sorting the MooseVariableFEBases based on variable numbers
  */
 bool
-sortMooseVariables(MooseVariableFEBase * a, MooseVariableFEBase * b)
+sortMooseVariables(const MooseVariableFEBase * a, const MooseVariableFEBase * b)
 {
   return a->number() < b->number();
 }
@@ -702,13 +702,20 @@ FEProblemBase::initialSetup()
   }
   else
   {
-    ExodusII_IO * reader = _mesh.exReader();
+    ExodusII_IO * reader = _app.getExReaderForRestart();
 
     if (reader)
     {
       CONSOLE_TIMED_PRINT("Copying variables from Exodus");
       _nl->copyVars(*reader);
       _aux->copyVars(*reader);
+    }
+    else
+    {
+      if (_nl->hasVarCopy() || _aux->hasVarCopy())
+        mooseError("Need Exodus reader to restart variables but the reader is not available\n"
+                   "Use either FileMesh with an Exodus mesh file or FileMeshGenerator with an "
+                   "Exodus mesh file and with use_for_exodus_restart equal to true");
     }
   }
 
@@ -732,11 +739,11 @@ FEProblemBase::initialSetup()
   if (!_app.isRecovering())
   {
     /**
-     * If we are not recovering but we are doing restart (_app_setFileRestart() == true) with
+     * If we are not recovering but we are doing restart (_app.getExodusFileRestart() == true) with
      * additional uniform refinements. We have to delay the refinement until this point
      * in time so that the equation systems are initialized and projections can be performed.
      */
-    if (_mesh.uniformRefineLevel() > 0 && _app.setFileRestart())
+    if (_mesh.uniformRefineLevel() > 0 && _app.getExodusFileRestart())
     {
       if (!_app.isUltimateMaster())
         mooseError(
@@ -896,7 +903,7 @@ FEProblemBase::initialSetup()
   if (_displaced_mesh)
     _displaced_mesh->updateActiveSemiLocalNodeRange(_ghosted_elems);
 
-  // We need to move the mesh in order to build a map between mortar slave and master
+  // We need to move the mesh in order to build a map between mortar secondary and primary
   // interfaces. This map will then be used by the AgumentSparsityOnInterface ghosting functor to
   // know which dofs we need ghosted when we call EquationSystems::reinit
   if (_displaced_problem && _mortar_data.hasDisplacedObjects())
@@ -1216,7 +1223,7 @@ FEProblemBase::checkNonlocalCoupling()
 void
 FEProblemBase::checkUserObjectJacobianRequirement(THREAD_ID tid)
 {
-  std::set<MooseVariableFEBase *> uo_jacobian_moose_vars;
+  std::set<const MooseVariableFEBase *> uo_jacobian_moose_vars;
   {
     std::vector<ShapeElementUserObject *> objs;
     theWarehouse()
@@ -1228,7 +1235,7 @@ FEProblemBase::checkUserObjectJacobianRequirement(THREAD_ID tid)
     for (const auto & uo : objs)
     {
       _calculate_jacobian_in_uo = uo->computeJacobianFlag();
-      const std::set<MooseVariableFEBase *> & mv_deps = uo->jacobianMooseVariables();
+      const auto & mv_deps = uo->jacobianMooseVariables();
       uo_jacobian_moose_vars.insert(mv_deps.begin(), mv_deps.end());
     }
   }
@@ -1242,7 +1249,7 @@ FEProblemBase::checkUserObjectJacobianRequirement(THREAD_ID tid)
     for (const auto & uo : objs)
     {
       _calculate_jacobian_in_uo = uo->computeJacobianFlag();
-      const std::set<MooseVariableFEBase *> & mv_deps = uo->jacobianMooseVariables();
+      const auto & mv_deps = uo->jacobianMooseVariables();
       uo_jacobian_moose_vars.insert(mv_deps.begin(), mv_deps.end());
     }
   }
@@ -1253,7 +1260,7 @@ FEProblemBase::checkUserObjectJacobianRequirement(THREAD_ID tid)
 }
 
 void
-FEProblemBase::setVariableAllDoFMap(const std::vector<MooseVariableFEBase *> moose_vars)
+FEProblemBase::setVariableAllDoFMap(const std::vector<const MooseVariableFEBase *> & moose_vars)
 {
   for (unsigned int i = 0; i < moose_vars.size(); ++i)
   {
@@ -1744,6 +1751,19 @@ FEProblemBase::reinitElemFace(const Elem * elem,
 }
 
 void
+FEProblemBase::reinitLowerDElem(const Elem * lower_d_elem,
+                                THREAD_ID tid,
+                                const std::vector<Point> * const pts,
+                                const std::vector<Real> * const weights)
+{
+  SubProblem::reinitLowerDElem(lower_d_elem, tid, pts, weights);
+
+  if (_displaced_problem && _displaced_mesh)
+    _displaced_problem->reinitLowerDElem(
+        _displaced_mesh->elemPtr(lower_d_elem->id()), tid, pts, weights);
+}
+
+void
 FEProblemBase::reinitNode(const Node * node, THREAD_ID tid)
 {
   _assembly[tid]->reinit(node);
@@ -1945,7 +1965,9 @@ FEProblemBase::neighborSubdomainSetup(SubdomainID subdomain, THREAD_ID tid)
 }
 
 void
-FEProblemBase::addFunction(std::string type, const std::string & name, InputParameters & parameters)
+FEProblemBase::addFunction(const std::string & type,
+                           const std::string & name,
+                           InputParameters & parameters)
 {
   parameters.set<SubProblem *>("_subproblem") = this;
 
@@ -2024,7 +2046,7 @@ FEProblemBase::getNonlinearSystem()
 }
 
 void
-FEProblemBase::addDistribution(std::string type,
+FEProblemBase::addDistribution(const std::string & type,
                                const std::string & name,
                                InputParameters & parameters)
 {
@@ -2048,7 +2070,9 @@ FEProblemBase::getDistribution(const std::string & name)
 }
 
 void
-FEProblemBase::addSampler(std::string type, const std::string & name, InputParameters & parameters)
+FEProblemBase::addSampler(const std::string & type,
+                          const std::string & name,
+                          InputParameters & parameters)
 {
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
@@ -2611,7 +2635,7 @@ FEProblemBase::addDGKernel(const std::string & dg_kernel_name,
       if (_displaced_neighbor_ref_pts == "invert_elem_phys")
         mooseError(
             "Cannot use elem-neighbor objects which rely on 1) undisplaced reference points and 2) "
-            "inversion of master elem physical points in the same simulation");
+            "inversion of primary elem physical points in the same simulation");
       else if (_displaced_neighbor_ref_pts == "unset")
         _displaced_neighbor_ref_pts = "use_undisplaced_ref";
       else if (_displaced_neighbor_ref_pts != "use_undisplaced_ref")
@@ -2623,7 +2647,7 @@ FEProblemBase::addDGKernel(const std::string & dg_kernel_name,
       if (_displaced_neighbor_ref_pts == "use_undisplaced_ref")
         mooseError(
             "Cannot use elem-neighbor objects which rely on 1) undisplaced reference points and 2) "
-            "inversion of master elem physical points in the same simulation");
+            "inversion of primary elem physical points in the same simulation");
       else if (_displaced_neighbor_ref_pts == "unset")
         _displaced_neighbor_ref_pts = "invert_elem_phys";
       else if (_displaced_neighbor_ref_pts != "invert_elem_phys")
@@ -2735,7 +2759,7 @@ FEProblemBase::addInterfaceKernel(const std::string & interface_kernel_name,
       if (_displaced_neighbor_ref_pts == "invert_elem_phys")
         mooseError(
             "Cannot use elem-neighbor objects which rely on 1) undisplaced reference points and 2) "
-            "inversion of master elem physical points in the same simulation");
+            "inversion of primary elem physical points in the same simulation");
       else if (_displaced_neighbor_ref_pts == "unset")
         _displaced_neighbor_ref_pts = "use_undisplaced_ref";
       else if (_displaced_neighbor_ref_pts != "use_undisplaced_ref")
@@ -2747,7 +2771,7 @@ FEProblemBase::addInterfaceKernel(const std::string & interface_kernel_name,
       if (_displaced_neighbor_ref_pts == "use_undisplaced_ref")
         mooseError(
             "Cannot use elem-neighbor objects which rely on 1) undisplaced reference points and 2) "
-            "inversion of master elem physical points in the same simulation");
+            "inversion of primary elem physical points in the same simulation");
       else if (_displaced_neighbor_ref_pts == "unset")
         _displaced_neighbor_ref_pts = "invert_elem_phys";
       else if (_displaced_neighbor_ref_pts != "invert_elem_phys")
@@ -3303,13 +3327,14 @@ FEProblemBase::initVectorPostprocessorData(const std::string & name)
 }
 
 void
-FEProblemBase::addPostprocessor(std::string pp_name,
+FEProblemBase::addPostprocessor(const std::string & pp_name,
                                 const std::string & name,
                                 InputParameters & parameters)
 {
   // Check for name collision
   if (hasUserObject(name))
-    mooseError(std::string("A UserObject with the name \"") + name +
+    mooseError("A UserObject with the name \"",
+               name,
                "\" already exists.  You may not add a Postprocessor by the same name.");
 
   addUserObject(pp_name, name, parameters);
@@ -3317,13 +3342,14 @@ FEProblemBase::addPostprocessor(std::string pp_name,
 }
 
 void
-FEProblemBase::addVectorPostprocessor(std::string pp_name,
+FEProblemBase::addVectorPostprocessor(const std::string & pp_name,
                                       const std::string & name,
                                       InputParameters & parameters)
 {
   // Check for name collision
   if (hasUserObject(name))
-    mooseError(std::string("A UserObject with the name \"") + name +
+    mooseError("A UserObject with the name \"",
+               name,
                "\" already exists.  You may not add a VectorPostprocessor by the same name.");
 
   addUserObject(pp_name, name, parameters);
@@ -3331,7 +3357,7 @@ FEProblemBase::addVectorPostprocessor(std::string pp_name,
 }
 
 void
-FEProblemBase::addUserObject(std::string user_object_name,
+FEProblemBase::addUserObject(const std::string & user_object_name,
                              const std::string & name,
                              InputParameters & parameters)
 {
@@ -3983,7 +4009,7 @@ FEProblemBase::reinitBecauseOfGhostingOrNewGeomObjects()
 }
 
 void
-FEProblemBase::addDamper(std::string damper_name,
+FEProblemBase::addDamper(const std::string & damper_name,
                          const std::string & name,
                          InputParameters & parameters)
 {
@@ -4001,7 +4027,7 @@ FEProblemBase::setupDampers()
 }
 
 void
-FEProblemBase::addIndicator(std::string indicator_name,
+FEProblemBase::addIndicator(const std::string & indicator_name,
                             const std::string & name,
                             InputParameters & parameters)
 {
@@ -4042,7 +4068,7 @@ FEProblemBase::addIndicator(std::string indicator_name,
 }
 
 void
-FEProblemBase::addMarker(std::string marker_name,
+FEProblemBase::addMarker(const std::string & marker_name,
                          const std::string & name,
                          InputParameters & parameters)
 {
@@ -4274,7 +4300,7 @@ FEProblemBase::incrementMultiAppTStep(ExecFlagType type)
 }
 
 void
-FEProblemBase::finishMultiAppStep(ExecFlagType type)
+FEProblemBase::finishMultiAppStep(ExecFlagType type, bool recurse_through_multiapp_levels)
 {
   const auto & multi_apps = _multi_apps[type].getActiveObjects();
 
@@ -4284,7 +4310,7 @@ FEProblemBase::finishMultiAppStep(ExecFlagType type)
              << std::endl;
 
     for (const auto & multi_app : multi_apps)
-      multi_app->finishStep();
+      multi_app->finishStep(recurse_through_multiapp_levels);
 
     MooseUtils::parallelBarrierNotify(_communicator, _parallel_barrier_messaging);
 
@@ -4616,31 +4642,11 @@ FEProblemBase::clearActiveMaterialProperties(THREAD_ID tid)
 }
 
 void
-FEProblemBase::createQRules(QuadratureType type, Order order, Order volume_order, Order face_order)
+FEProblemBase::updateMaxQps()
 {
-  if (order == INVALID_ORDER)
-  {
-    // automatically determine the integration order
-    order = _nl->getMinQuadratureOrder();
-    if (order < _aux->getMinQuadratureOrder())
-      order = _aux->getMinQuadratureOrder();
-  }
-
-  if (volume_order == INVALID_ORDER)
-    volume_order = order;
-
-  if (face_order == INVALID_ORDER)
-    face_order = order;
-
-  for (unsigned int tid = 0; tid < libMesh::n_threads(); ++tid)
-    _assembly[tid]->createQRules(type, order, volume_order, face_order);
-
-  if (_displaced_problem)
-    _displaced_problem->createQRules(type, order, volume_order, face_order);
-
   // Find the maximum number of quadrature points
   {
-    MaxQpsThread mqt(*this, type, std::max(order, volume_order), face_order);
+    MaxQpsThread mqt(*this);
     Threads::parallel_reduce(*_mesh.getActiveLocalElementRange(), mqt);
     _max_qps = mqt.max();
     _max_shape_funcs = mqt.max_shape_funcs();
@@ -4666,6 +4672,45 @@ FEProblemBase::createQRules(QuadratureType type, Order order, Order volume_order
     _vector_zero[tid].resize(max_qpts, RealGradient(0.));
     _vector_curl_zero[tid].resize(max_qpts, RealGradient(0.));
   }
+}
+
+void
+FEProblemBase::bumpVolumeQRuleOrder(Order order, SubdomainID block)
+{
+  for (unsigned int tid = 0; tid < libMesh::n_threads(); ++tid)
+    _assembly[tid]->bumpVolumeQRuleOrder(order, block);
+
+  if (_displaced_problem)
+    _displaced_problem->bumpVolumeQRuleOrder(order, block);
+
+  updateMaxQps();
+}
+
+void
+FEProblemBase::createQRules(
+    QuadratureType type, Order order, Order volume_order, Order face_order, SubdomainID block)
+{
+  if (order == INVALID_ORDER)
+  {
+    // automatically determine the integration order
+    order = _nl->getMinQuadratureOrder();
+    if (order < _aux->getMinQuadratureOrder())
+      order = _aux->getMinQuadratureOrder();
+  }
+
+  if (volume_order == INVALID_ORDER)
+    volume_order = order;
+
+  if (face_order == INVALID_ORDER)
+    face_order = order;
+
+  for (unsigned int tid = 0; tid < libMesh::n_threads(); ++tid)
+    _assembly[tid]->createQRules(type, order, volume_order, face_order, block);
+
+  if (_displaced_problem)
+    _displaced_problem->createQRules(type, order, volume_order, face_order, block);
+
+  updateMaxQps();
 }
 
 void
@@ -5756,32 +5801,35 @@ FEProblemBase::updateMortarMesh()
 
 void
 FEProblemBase::createMortarInterface(
-    const std::pair<BoundaryID, BoundaryID> & master_slave_boundary_pair,
-    const std::pair<SubdomainID, SubdomainID> & master_slave_subdomain_pair,
+    const std::pair<BoundaryID, BoundaryID> & primary_secondary_boundary_pair,
+    const std::pair<SubdomainID, SubdomainID> & primary_secondary_subdomain_pair,
     bool on_displaced,
     bool periodic)
 {
   _has_mortar = true;
 
   if (on_displaced)
-    return _mortar_data.createMortarInterface(master_slave_boundary_pair,
-                                              master_slave_subdomain_pair,
+    return _mortar_data.createMortarInterface(primary_secondary_boundary_pair,
+                                              primary_secondary_subdomain_pair,
                                               *_displaced_problem,
                                               on_displaced,
                                               periodic);
   else
-    return _mortar_data.createMortarInterface(
-        master_slave_boundary_pair, master_slave_subdomain_pair, *this, on_displaced, periodic);
+    return _mortar_data.createMortarInterface(primary_secondary_boundary_pair,
+                                              primary_secondary_subdomain_pair,
+                                              *this,
+                                              on_displaced,
+                                              periodic);
 }
 
 const AutomaticMortarGeneration &
 FEProblemBase::getMortarInterface(
-    const std::pair<BoundaryID, BoundaryID> & master_slave_boundary_pair,
-    const std::pair<SubdomainID, SubdomainID> & master_slave_subdomain_pair,
+    const std::pair<BoundaryID, BoundaryID> & primary_secondary_boundary_pair,
+    const std::pair<SubdomainID, SubdomainID> & primary_secondary_subdomain_pair,
     bool on_displaced) const
 {
   return _mortar_data.getMortarInterface(
-      master_slave_boundary_pair, master_slave_subdomain_pair, on_displaced);
+      primary_secondary_boundary_pair, primary_secondary_subdomain_pair, on_displaced);
 }
 
 const std::unordered_map<std::pair<BoundaryID, BoundaryID>, AutomaticMortarGeneration> &

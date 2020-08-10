@@ -76,6 +76,11 @@ public:
     _picard_self_relaxed_variables = vars;
   }
 
+  /**
+   * Whether sub-applications are automatically advanced no matter what happens during their solves
+   */
+  bool autoAdvance() const;
+
 protected:
   /**
    * Perform one Picard iteration or a full solve.
@@ -114,7 +119,7 @@ protected:
   /// Absolute tolerance on residual norm
   Real _picard_abs_tol;
   /// Postprocessor value for user-defined picard convergence check
-  const PostprocessorValue * _picard_custom_pp;
+  const PostprocessorValue * const _picard_custom_pp;
   /// Relative tolerance on postprocessor value
   Real _custom_rel_tol;
   /// Absolute tolerance on postprocessor value
@@ -162,4 +167,12 @@ private:
   Real _previous_entering_time;
 
   const std::string _solve_message;
+
+  /// Whether the user has set the auto_advance parameter for handling advancement of
+  /// sub-applications in multi-app contexts
+  const bool _auto_advance_set_by_user;
+
+  /// The value of auto_advance set by the user for handling advancement of sub-applications in
+  /// multi-app contexts
+  const bool _auto_advance_user_value;
 };

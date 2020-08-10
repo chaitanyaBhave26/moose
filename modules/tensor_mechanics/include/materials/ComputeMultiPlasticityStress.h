@@ -151,19 +151,19 @@ protected:
   bool _cosserat;
 
   /// The Cosserat curvature strain
-  const MaterialProperty<RankTwoTensor> * _curvature;
+  const MaterialProperty<RankTwoTensor> * const _curvature;
 
   /// The Cosserat elastic flexural rigidity tensor
-  const MaterialProperty<RankFourTensor> * _elastic_flexural_rigidity_tensor;
+  const MaterialProperty<RankFourTensor> * const _elastic_flexural_rigidity_tensor;
 
   /// the Cosserat couple-stress
-  MaterialProperty<RankTwoTensor> * _couple_stress;
+  MaterialProperty<RankTwoTensor> * const _couple_stress;
 
   /// the old value of Cosserat couple-stress
-  const MaterialProperty<RankTwoTensor> * _couple_stress_old;
+  const MaterialProperty<RankTwoTensor> * const _couple_stress_old;
 
   /// derivative of couple-stress w.r.t. curvature
-  MaterialProperty<RankFourTensor> * _Jacobian_mult_couple;
+  MaterialProperty<RankFourTensor> * const _Jacobian_mult_couple;
 
   /// Elasticity tensor that can be rotated by this class (ie, its not const)
   RankFourTensor _my_elasticity_tensor;
@@ -218,7 +218,7 @@ protected:
    * @param[out] intnl     All the internal variables after returning to the yield surface
    * @param plastic_strain_old The value of plastic strain at the previous "time" step
    * @param[out] plastic_strain    The value of plastic strain after returning to the yield surface
-   * @param E_ijkl   The elasticity tensor.  If no plasiticity then stress = stress_old +
+   * @param E_ijkl   The elasticity tensor.  If no plasticity then stress = stress_old +
    * E_ijkl*strain_increment
    * @param strain_increment   The applied strain increment
    * @param[out] f   All the yield functions after returning to the yield surface

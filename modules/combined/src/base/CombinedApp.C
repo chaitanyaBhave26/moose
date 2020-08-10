@@ -26,7 +26,6 @@
 #include "PorousFlowApp.h"
 #include "RdgApp.h"
 #include "RichardsApp.h"
-#include "SolidMechanicsApp.h"
 #include "StochasticToolsApp.h"
 #include "PeridynamicsApp.h"
 #include "TensorMechanicsApp.h"
@@ -42,6 +41,8 @@ CombinedApp::validParams()
 
   // Do not use legacy DirichletBC, that is, set DirichletBC default for preset = true
   params.set<bool>("use_legacy_dirichlet_bc") = false;
+
+  params.set<bool>("use_legacy_material_output") = false;
 
   return params;
 }
@@ -80,7 +81,6 @@ CombinedApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
   PorousFlowApp::registerAll(f, af, s);
   RdgApp::registerAll(f, af, s);
   RichardsApp::registerAll(f, af, s);
-  SolidMechanicsApp::registerAll(f, af, s);
   StochasticToolsApp::registerAll(f, af, s);
   PeridynamicsApp::registerAll(f, af, s);
   TensorMechanicsApp::registerAll(f, af, s);
@@ -104,7 +104,6 @@ CombinedApp::registerObjects(Factory & factory)
   PorousFlowApp::registerObjects(factory);
   RdgApp::registerObjects(factory);
   RichardsApp::registerObjects(factory);
-  SolidMechanicsApp::registerObjects(factory);
   StochasticToolsApp::registerObjects(factory);
   PeridynamicsApp::registerObjects(factory);
   TensorMechanicsApp::registerObjects(factory);
@@ -127,7 +126,6 @@ CombinedApp::associateSyntax(Syntax & syntax, ActionFactory & action_factory)
   PorousFlowApp::associateSyntax(syntax, action_factory);
   RdgApp::associateSyntax(syntax, action_factory);
   RichardsApp::associateSyntax(syntax, action_factory);
-  SolidMechanicsApp::associateSyntax(syntax, action_factory);
   StochasticToolsApp::associateSyntax(syntax, action_factory);
   PeridynamicsApp::associateSyntax(syntax, action_factory);
   TensorMechanicsApp::associateSyntax(syntax, action_factory);
@@ -146,7 +144,6 @@ CombinedApp::registerExecFlags(Factory & factory)
   NavierStokesApp::registerExecFlags(factory);
   PhaseFieldApp::registerExecFlags(factory);
   RichardsApp::registerExecFlags(factory);
-  SolidMechanicsApp::registerExecFlags(factory);
   StochasticToolsApp::registerExecFlags(factory);
   PeridynamicsApp::registerExecFlags(factory);
   TensorMechanicsApp::registerExecFlags(factory);

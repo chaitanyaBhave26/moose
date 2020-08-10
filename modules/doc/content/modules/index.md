@@ -17,7 +17,6 @@ application.
 - [Porous Flow](modules/porous_flow/index.md)
 - [Reconstructed Discontinous Galerkin](modules/rdg/index.md)
 - [Richards](modules/richards/index.md)
-- [Solid Mechanics](modules/solid_mechanics/index.md)
 - [Stochastic Tools](modules/stochastic_tools/index.md)
 - [Tensor Mechanics](modules/tensor_mechanics/index.md)
 - [XFEM](modules/xfem/index.md)
@@ -28,3 +27,9 @@ modules are organized so that your application can link against only those which
 
 !alert warning
 No export controlled physics (e.g., neutronics) should be put into the modules.
+
+## Combined Examples
+
+Below contains a list of examples that utilize a combination of the physics modules listed above.
+
+- [modules/combined/examples/stm_thermomechanics.md]

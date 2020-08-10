@@ -155,12 +155,12 @@ MooseMesh::validParams()
       "How often to update the geometric search 'patch'.  The default is to "
       "never update it (which is the most efficient but could be a problem "
       "with lots of relative motion). 'always' will update the patch for all "
-      "slave nodes at the beginning of every timestep which might be time "
+      "secondary nodes at the beginning of every timestep which might be time "
       "consuming. 'auto' will attempt to determine at the start of which "
-      "timesteps the patch for all slave nodes needs to be updated automatically."
+      "timesteps the patch for all secondary nodes needs to be updated automatically."
       "'iteration' updates the patch at every nonlinear iteration for a "
-      "subset of slave nodes for which penetration is not detected. If there "
-      "can be substantial relative motion between the master and slave surfaces "
+      "subset of secondary nodes for which penetration is not detected. If there "
+      "can be substantial relative motion between the primary and secondary surfaces "
       "during the nonlinear iterations within a timestep, it is advisable to use "
       "'iteration' option to ensure accurate contact detection.");
 
@@ -256,7 +256,8 @@ MooseMesh::MooseMesh(const InputParameters & parameters)
     _init_timer(registerTimedSection("init", 2)),
     _read_recovered_mesh_timer(registerTimedSection("readRecoveredMesh", 2)),
     _ghost_ghosted_boundaries_timer(registerTimedSection("GhostGhostedBoundaries", 3)),
-    _need_delete(false)
+    _need_delete(false),
+    _need_ghost_ghosted_boundaries(true)
 {
   if (isParamValid("ghosting_patch_size") && (_patch_update_strategy != Moose::Iteration))
     mooseError("Ghosting patch size parameter has to be set in the mesh block "
@@ -317,7 +318,8 @@ MooseMesh::MooseMesh(const MooseMesh & other_mesh)
     _init_timer(registerTimedSection("init", 2)),
     _read_recovered_mesh_timer(registerTimedSection("readRecoveredMesh", 2)),
     _ghost_ghosted_boundaries_timer(registerTimedSection("GhostGhostedBoundaries", 3)),
-    _need_delete(other_mesh._need_delete)
+    _need_delete(other_mesh._need_delete),
+    _need_ghost_ghosted_boundaries(other_mesh._need_ghost_ghosted_boundaries)
 {
   // Note: this calls BoundaryInfo::operator= without changing the
   // ownership semantics of either Mesh's BoundaryInfo object.
@@ -408,7 +410,7 @@ MooseMesh::prepare(bool force)
     {
       CONSOLE_TIMED_PRINT("Preparing for use");
 
-      getMesh().prepare_for_use(false, false);
+      getMesh().prepare_for_use();
     }
   }
   else
@@ -418,7 +420,7 @@ MooseMesh::prepare(bool force)
     // Call prepare_for_use() and DO NOT allow renumbering
     getMesh().allow_renumbering(false);
     if (force || _needs_prepare_for_use)
-      getMesh().prepare_for_use(false, false);
+      getMesh().prepare_for_use();
   }
 
   // Collect (local) subdomain IDs
@@ -476,6 +478,7 @@ MooseMesh::update()
   buildNodeList();
   buildBndElemList();
   cacheInfo();
+  buildElemIDInfo();
 
   _face_info_dirty = true;
 }
@@ -727,6 +730,76 @@ MooseMesh::buildNodeList()
 }
 
 void
+MooseMesh::buildElemIDInfo()
+{
+  unsigned int n = getMesh().n_elem_integers() + 1;
+
+  _block_id_mapping.clear();
+  _max_ids.clear();
+  _min_ids.clear();
+  _id_identical_flag.clear();
+
+  _block_id_mapping.resize(n);
+  _max_ids.resize(n, std::numeric_limits<dof_id_type>::min());
+  _min_ids.resize(n, std::numeric_limits<dof_id_type>::max());
+  _id_identical_flag.resize(n, std::vector<bool>(n, true));
+  for (const auto & elem : getMesh().active_local_element_ptr_range())
+    for (unsigned int i = 0; i < n; ++i)
+    {
+      auto id = (i == n - 1 ? elem->subdomain_id() : elem->get_extra_integer(i));
+      _block_id_mapping[i][elem->subdomain_id()].insert(id);
+      if (id > _max_ids[i])
+        _max_ids[i] = id;
+      if (id < _min_ids[i])
+        _min_ids[i] = id;
+      for (unsigned int j = 0; j < n; ++j)
+      {
+        auto idj = (j == n - 1 ? elem->subdomain_id() : elem->get_extra_integer(j));
+        if (i != j && _id_identical_flag[i][j] && id != idj)
+          _id_identical_flag[i][j] = false;
+      }
+    }
+
+  for (unsigned int i = 0; i < n; ++i)
+  {
+    for (auto & blk : meshSubdomains())
+      comm().set_union(_block_id_mapping[i][blk]);
+    comm().min(_id_identical_flag[i]);
+  }
+  comm().max(_max_ids);
+  comm().min(_min_ids);
+}
+
+std::set<dof_id_type>
+MooseMesh::getAllElemIDs(unsigned int elem_id_index) const
+{
+  std::set<dof_id_type> unique_ids;
+  for (auto & pair : _block_id_mapping[elem_id_index])
+    for (auto & id : pair.second)
+      unique_ids.insert(id);
+  return unique_ids;
+}
+
+std::set<dof_id_type>
+MooseMesh::getElemIDsOnBlocks(unsigned int elem_id_index, const std::set<SubdomainID> & blks) const
+{
+  std::set<dof_id_type> unique_ids;
+  for (auto & blk : blks)
+  {
+    if (blk == Moose::ANY_BLOCK_ID)
+      return getAllElemIDs(elem_id_index);
+
+    auto it = _block_id_mapping[elem_id_index].find(blk);
+    if (it == _block_id_mapping[elem_id_index].end())
+      mooseError("Block ", blk, " is not available on the mesh");
+
+    for (auto & mid : it->second)
+      unique_ids.insert(mid);
+  }
+  return unique_ids;
+}
+
+void
 MooseMesh::buildBndElemList()
 {
   TIME_SECTION(_build_bnd_elem_list_timer);
@@ -895,27 +968,47 @@ MooseMesh::cacheInfo()
   TIME_SECTION(_cache_info_timer);
   CONSOLE_TIMED_PRINT("Caching mesh information");
 
+  _sub_to_neighbor_subs.clear();
   _subdomain_boundary_ids.clear();
   _neighbor_subdomain_boundary_ids.clear();
   _block_node_list.clear();
+  _higher_d_elem_side_to_lower_d_elem.clear();
 
   // TODO: Thread this!
   for (const auto & elem : getMesh().element_ptr_range())
   {
     SubdomainID subdomain_id = elem->subdomain_id();
+    const Elem * ip_elem = elem->interior_parent();
+
+    if (ip_elem)
+    {
+      unsigned int ip_side = ip_elem->which_side_am_i(elem);
+
+      // For some grid sequencing tests: ip_side == libMesh::invalid_uint
+      if (ip_side != libMesh::invalid_uint)
+      {
+        auto pair = std::make_pair(ip_elem, ip_side);
+        _higher_d_elem_side_to_lower_d_elem.insert(
+            std::pair<std::pair<const Elem *, unsigned short int>, const Elem *>(pair, elem));
+      }
+    }
 
     for (unsigned int side = 0; side < elem->n_sides(); side++)
     {
       std::vector<BoundaryID> boundaryids = getBoundaryIDs(elem, side);
-
       std::set<BoundaryID> & subdomain_set = _subdomain_boundary_ids[subdomain_id];
 
       subdomain_set.insert(boundaryids.begin(), boundaryids.end());
 
       Elem * neig = elem->neighbor_ptr(side);
       if (neig)
+      {
         _neighbor_subdomain_boundary_ids[neig->subdomain_id()].insert(boundaryids.begin(),
                                                                       boundaryids.end());
+        SubdomainID neighbor_subdomain_id = neig->subdomain_id();
+        if (neighbor_subdomain_id != subdomain_id)
+          _sub_to_neighbor_subs[subdomain_id].insert(neighbor_subdomain_id);
+      }
     }
 
     for (unsigned int nd = 0; nd < elem->n_nodes(); ++nd)
@@ -927,6 +1020,7 @@ MooseMesh::cacheInfo()
 
   for (const auto & blk_id : _mesh_subdomains)
   {
+    _communicator.set_union(_sub_to_neighbor_subs[blk_id]);
     _communicator.set_union(_subdomain_boundary_ids[blk_id]);
     _communicator.set_union(_neighbor_subdomain_boundary_ids[blk_id]);
   }
@@ -1105,6 +1199,17 @@ MooseMesh::getBoundaryID(const BoundaryName & boundary_name) const
     id = getMesh().get_boundary_info().get_id_by_name(boundary_name);
 
   return id;
+}
+
+const Elem *
+MooseMesh::getLowerDElem(const Elem * elem, unsigned short int side) const
+{
+  auto it = _higher_d_elem_side_to_lower_d_elem.find(std::make_pair(elem, side));
+
+  if (it != _higher_d_elem_side_to_lower_d_elem.end())
+    return it->second;
+  else
+    return nullptr;
 }
 
 std::vector<BoundaryID>
@@ -1543,6 +1648,75 @@ MooseMesh::detectPairedSidesets()
       }
     }
   }
+
+  // For a distributed mesh, boundaries may be distributed as well. We therefore
+  // collect information from everyone.
+  // If we already performed ghostGhostedBoundaries, all boundaries are gathered
+  // to every single processor, then we do not do gather boundary ids here
+  if (_use_distributed_mesh && !_need_ghost_ghosted_boundaries)
+  {
+    // Pack all data together so that we send them via one communication
+    // pair: boundary side --> boundary ids.
+    std::vector<std::pair<boundary_id_type, boundary_id_type>> vecdata;
+    //  We check boundaries on all dimensions
+    for (unsigned side_dim = 0; side_dim < dim; ++side_dim)
+    {
+      // "6" means: we have at most 6 boundaries. It is true for generated simple mesh
+      // "detectPairedSidesets" is designed for only simple meshes
+      for (auto bd = minus_x_ids[side_dim].begin(); bd != minus_x_ids[side_dim].end(); bd++)
+        vecdata.emplace_back(side_dim * 6 + 0, *bd);
+
+      for (auto bd = plus_x_ids[side_dim].begin(); bd != plus_x_ids[side_dim].end(); bd++)
+        vecdata.emplace_back(side_dim * 6 + 1, *bd);
+
+      for (auto bd = minus_y_ids[side_dim].begin(); bd != minus_y_ids[side_dim].end(); bd++)
+        vecdata.emplace_back(side_dim * 6 + 2, *bd);
+
+      for (auto bd = plus_y_ids[side_dim].begin(); bd != plus_y_ids[side_dim].end(); bd++)
+        vecdata.emplace_back(side_dim * 6 + 3, *bd);
+
+      for (auto bd = minus_z_ids[side_dim].begin(); bd != minus_z_ids[side_dim].end(); bd++)
+        vecdata.emplace_back(side_dim * 6 + 4, *bd);
+
+      for (auto bd = plus_z_ids[side_dim].begin(); bd != plus_z_ids[side_dim].end(); bd++)
+        vecdata.emplace_back(side_dim * 6 + 5, *bd);
+    }
+
+    _communicator.allgather(vecdata, false);
+
+    // Unpack data, and add them into minus/plus_x/y_ids
+    for (auto pair = vecdata.begin(); pair != vecdata.end(); pair++)
+    {
+      // Convert data from the long vector, and add data to separated sets
+      auto side_dim = pair->first / 6;
+      auto side = pair->first % 6;
+
+      switch (side)
+      {
+        case 0:
+          minus_x_ids[side_dim].insert(pair->second);
+          break;
+        case 1:
+          plus_x_ids[side_dim].insert(pair->second);
+          break;
+        case 2:
+          minus_y_ids[side_dim].insert(pair->second);
+          break;
+        case 3:
+          plus_y_ids[side_dim].insert(pair->second);
+          break;
+        case 4:
+          minus_z_ids[side_dim].insert(pair->second);
+          break;
+        case 5:
+          plus_z_ids[side_dim].insert(pair->second);
+          break;
+        default:
+          mooseError("Unknown boundary side ", side);
+      }
+    }
+
+  } // end if (_use_distributed_mesh && !_need_ghost_ghosted_boundaries)
 
   for (unsigned side_dim = 0; side_dim < dim; ++side_dim)
   {
@@ -2534,7 +2708,10 @@ void
 MooseMesh::ghostGhostedBoundaries()
 {
   // No need to do this if using a serial mesh
-  if (!_use_distributed_mesh)
+  // We do not need to ghost boundary elements when _need_ghost_ghosted_boundaries
+  // is not true. _need_ghost_ghosted_boundaries can be set by a mesh generator
+  // where boundaries are already ghosted accordingly
+  if (!_use_distributed_mesh || !_need_ghost_ghosted_boundaries)
     return;
 
   TIME_SECTION(_ghost_ghosted_boundaries_timer);
@@ -2596,6 +2773,7 @@ MooseMesh::ghostGhostedBoundaries()
                                      connected_nodes_to_ghost.begin(),
                                      connected_nodes_to_ghost.end(),
                                      extra_ghost_elem_inserter<Node>(mesh));
+
   mesh.comm().allgather_packed_range(&mesh,
                                      boundary_elems_to_ghost.begin(),
                                      boundary_elems_to_ghost.end(),
@@ -2666,13 +2844,6 @@ MooseMesh::getMesh() const
   return *_mesh;
 }
 
-ExodusII_IO *
-MooseMesh::exReader() const
-{
-  // TODO: Implement or remove
-  return nullptr;
-}
-
 void
 MooseMesh::printInfo(std::ostream & os) const
 {
@@ -2707,7 +2878,7 @@ MooseMesh::getNodeList(boundary_id_type nodeset_id) const
 }
 
 const std::set<BoundaryID> &
-MooseMesh::getSubdomainBoundaryIds(SubdomainID subdomain_id) const
+MooseMesh::getSubdomainBoundaryIds(const SubdomainID subdomain_id) const
 {
   std::unordered_map<SubdomainID, std::set<BoundaryID>>::const_iterator it =
       _subdomain_boundary_ids.find(subdomain_id);
@@ -2719,7 +2890,7 @@ MooseMesh::getSubdomainBoundaryIds(SubdomainID subdomain_id) const
 }
 
 std::set<BoundaryID>
-MooseMesh::getSubdomainInterfaceBoundaryIds(SubdomainID subdomain_id) const
+MooseMesh::getSubdomainInterfaceBoundaryIds(const SubdomainID subdomain_id) const
 {
   const auto & bnd_ids = getSubdomainBoundaryIds(subdomain_id);
   std::set<BoundaryID> boundary_ids(bnd_ids.begin(), bnd_ids.end());
@@ -2751,6 +2922,17 @@ MooseMesh::getInterfaceConnectedBlocks(const BoundaryID bid) const
       subdomain_ids.insert(it.first);
 
   return subdomain_ids;
+}
+
+const std::set<SubdomainID> &
+MooseMesh::getBlockConnectedBlocks(const SubdomainID subdomain_id) const
+{
+  auto it = _sub_to_neighbor_subs.find(subdomain_id);
+
+  if (it == _sub_to_neighbor_subs.end())
+    mooseError("Unable to find subdomain ID: ", subdomain_id, '.');
+
+  return it->second;
 }
 
 bool

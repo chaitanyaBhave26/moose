@@ -15,6 +15,7 @@
 #include "Restartable.h"
 #include "MooseEnum.h"
 #include "PerfGraphInterface.h"
+#include "MooseHashing.h"
 
 #include <memory> //std::unique_ptr
 #include <unordered_map>
@@ -43,7 +44,6 @@ class Partitioner;
 class GhostingFunctor;
 class BoundingBox;
 }
-
 // Useful typedefs
 typedef StoredRange<std::set<Node *>::iterator, Node *> SemiLocalNodeRange;
 
@@ -302,6 +302,14 @@ public:
    */
   std::vector<BoundaryID> getBoundaryIDs(const Elem * const elem,
                                          const unsigned short int side) const;
+
+  /**
+   * Returns a const pointer to a lower dimensional element that
+   * corresponds to a side of a higher dimensional element. This
+   * relationship is established through an internal_parent; if there is
+   * no lowerDElem, nullptr is returned.
+   */
+  const Elem * getLowerDElem(const Elem *, unsigned short int) const;
 
   /**
    * Returns a const reference to a set of all user-specified
@@ -623,6 +631,11 @@ public:
   void ghostGhostedBoundaries();
 
   /**
+   * Whether or not we want to ghost ghosted boundaries
+   */
+  void needGhostGhostedBoundaries(bool needghost) { _need_ghost_ghosted_boundaries = needghost; }
+
+  /**
    * Getter for the patch_size parameter.
    */
   unsigned int getPatchSize() const;
@@ -665,11 +678,6 @@ public:
    */
   MeshBase & getMesh();
   const MeshBase & getMesh() const;
-
-  /**
-   * Not implemented -- always returns NULL.
-   */
-  virtual ExodusII_IO * exReader() const;
 
   /**
    * Calls print_info() on the underlying Mesh.
@@ -919,7 +927,7 @@ public:
    * @param subdomain_id The subdomain ID you want to get the boundary ids for.
    * @return All boundary IDs connected to elements in the give
    */
-  const std::set<BoundaryID> & getSubdomainBoundaryIds(SubdomainID subdomain_id) const;
+  const std::set<BoundaryID> & getSubdomainBoundaryIds(const SubdomainID subdomain_id) const;
 
   /**
    * Get the list of boundaries that contact the given subdomain.
@@ -932,7 +940,7 @@ public:
   /**
    * Get the list of subdomains associated with the given boundary.
    *
-   * @param subdomain_id The boundary ID you want to get the subdomain IDs for.
+   * @param bid The boundary ID you want to get the subdomain IDs for.
    * @return All subdomain IDs associated with given boundary ID
    */
   std::set<SubdomainID> getBoundaryConnectedBlocks(const BoundaryID bid) const;
@@ -940,10 +948,18 @@ public:
   /**
    * Get the list of subdomains contacting the given boundary.
    *
-   * @param subdomain_id The boundary ID you want to get the subdomain IDs for.
+   * @param bid The boundary ID you want to get the subdomain IDs for.
    * @return All subdomain IDs contacting given boundary ID
    */
   std::set<SubdomainID> getInterfaceConnectedBlocks(const BoundaryID bid) const;
+
+  /**
+   * Get the list of subdomains neighboring a given subdomain.
+   *
+   * @param subdomain_id The boundary ID you want to get the subdomain IDs for.
+   * @return All subdomain IDs neighboring a given subdomain
+   */
+  const std::set<SubdomainID> & getBlockConnectedBlocks(const SubdomainID subdomain_id) const;
 
   /**
    * Returns true if the requested node is in the list of boundary nodes, false otherwise.
@@ -1063,6 +1079,56 @@ public:
    * Whether mesh base object was constructed or not
    */
   bool hasMeshBase() const { return _mesh.get() != nullptr; }
+
+  /**
+   * Whether mesh has an extra element integer with a given name
+   */
+  bool hasElementID(const std::string & id_name) const
+  {
+    return getMesh().has_elem_integer(id_name);
+  }
+
+  /**
+   * Return the accessing integer for an extra element integer with its name
+   */
+  unsigned int getElementIDIndex(const std::string & id_name) const
+  {
+    if (!hasElementID(id_name))
+      mooseError("Mesh does not have element ID for ", id_name);
+    return getMesh().get_elem_integer_index(id_name);
+  }
+
+  /**
+   * Return the maximum element ID for an extra element integer with its accessing index
+   */
+  dof_id_type maxElementID(unsigned int elem_id_index) const { return _max_ids[elem_id_index]; }
+
+  /**
+   * Return the minimum element ID for an extra element integer with its accessing index
+   */
+  dof_id_type minElementID(unsigned int elem_id_index) const { return _min_ids[elem_id_index]; }
+
+  /**
+   * Whether or not two extra element integers are identical
+   */
+  bool areElemIDsIdentical(const std::string & id_name1, const std::string & id_name2) const
+  {
+    auto id1 = getElementIDIndex(id_name1);
+    auto id2 = getElementIDIndex(id_name2);
+    return _id_identical_flag[id1][id2];
+  }
+
+  /**
+   * Return all the unique element IDs for an extra element integer with its index
+   */
+  std::set<dof_id_type> getAllElemIDs(unsigned int elem_id_index) const;
+
+  /**
+   * Return all the unique element IDs for an extra element integer with its index on a set of
+   * subdomains
+   */
+  std::set<dof_id_type> getElemIDsOnBlocks(unsigned int elem_id_index,
+                                           const std::set<SubdomainID> & blks) const;
 
   ///@{ accessors for the FaceInfo objects
   unsigned int nFace() const { return _face_info.size(); }
@@ -1361,11 +1427,18 @@ private:
   std::map<std::pair<int, ElemType>, std::vector<std::pair<unsigned int, QpMap>>>
       _elem_type_to_coarsening_map;
 
+  /// Holds a map from subomdain ids to the neighboring subdomain ids
+  std::unordered_map<SubdomainID, std::set<SubdomainID>> _sub_to_neighbor_subs;
+
   /// Holds a map from subomdain ids to the boundary ids that are attached to it
   std::unordered_map<SubdomainID, std::set<BoundaryID>> _subdomain_boundary_ids;
 
   /// Holds a map from neighbor subomdain ids to the boundary ids that are attached to it
   std::unordered_map<SubdomainID, std::set<BoundaryID>> _neighbor_subdomain_boundary_ids;
+
+  /// Holds a map from a high-order element side to its corresponding lower-d element
+  std::unordered_map<std::pair<const Elem *, unsigned short int>, const Elem *>
+      _higher_d_elem_side_to_lower_d_elem;
 
   /// Whether or not this Mesh is allowed to read a recovery file
   bool _allow_recovery;
@@ -1407,6 +1480,24 @@ private:
 
   /// Set of elements ghosted by ghostGhostedBoundaries
   std::set<Elem *> _ghost_elems_from_ghost_boundaries;
+
+  /// A parallel mesh generator such as DistributedRectilinearMeshGenerator
+  /// already make everything ready. We do not need to gather all boundaries to
+  /// every single processor. In general, we should avoid using ghostGhostedBoundaries
+  /// when posssible since it is not scalable
+  bool _need_ghost_ghosted_boundaries;
+
+  /// Unique element integer IDs for each subdomain and each extra element integers
+  std::vector<std::unordered_map<SubdomainID, std::set<dof_id_type>>> _block_id_mapping;
+  /// Maximum integer ID for each extra element integer
+  std::vector<dof_id_type> _max_ids;
+  /// Minimum integer ID for each extra element integer
+  std::vector<dof_id_type> _min_ids;
+  /// Flags to indicate whether or not any two extra element integers are the same
+  std::vector<std::vector<bool>> _id_identical_flag;
+
+  /// Build extra data for faster access to the information of extra element integers
+  void buildElemIDInfo();
 };
 
 /**
